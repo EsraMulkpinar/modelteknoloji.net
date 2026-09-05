@@ -19,59 +19,75 @@ const EMAILJS_SERVICE_ID = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID;
 const EMAILJS_TEMPLATE_ID = process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID;
 const EMAILJS_PUBLIC_KEY = process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY;
 
-type Status = "idle" | "sending" | "sent" | "error";
+const WHATSAPP_NUMBER = "905330703629";
+
+type Status = "idle" | "sent";
+
+/** Form alanlarını okunaklı tek bir mesaja çevirir. Boş alanlar atlanır. */
+function buildMessage(data: Record<string, string>) {
+  const satir = (etiket: string, deger?: string) =>
+    deger && deger.trim() ? `${etiket}: ${deger.trim()}` : null;
+
+  return [
+    "Model Teknoloji — web sitesinden yeni talep",
+    "",
+    satir("Ad Soyad", data.name),
+    satir("Kurumsal e-posta", data.email),
+    satir("Şirket", data.company),
+    satir("Ünvan / Rol", data.role),
+    satir("Telefon", data.phone),
+    satir("Konu", data.subject),
+    satir("İlgilendiği ürün", data.product),
+    data.message?.trim() ? "" : null,
+    data.message?.trim() ? data.message.trim() : null,
+  ]
+    .filter((s): s is string => s !== null)
+    .join("\n");
+}
 
 export default function ContactPage() {
   const [status, setStatus] = useState<Status>("idle");
+  const [waUrl, setWaUrl] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
     const data = Object.fromEntries(new FormData(form).entries()) as Record<string, string>;
+    const mesaj = buildMessage(data);
 
-    // EmailJS yapılandırılmamışsa mail istemcisine düş
-    if (!EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID || !EMAILJS_PUBLIC_KEY) {
-      const body = [
-        `Ad Soyad: ${data.name}`,
-        `E-posta: ${data.email}`,
-        `Şirket: ${data.company}`,
-        `Ünvan / Rol: ${data.role}`,
-        `Telefon: ${data.phone}`,
-        `Konu: ${data.subject}`,
-        `İlgilendiği ürün: ${data.product || "-"}`,
-        "",
-        data.message,
-      ].join("\n");
-      window.location.href = `mailto:info@modelteknoloji.net?subject=${encodeURIComponent(
-        `[Web] ${data.subject || "İletişim formu"}`
-      )}&body=${encodeURIComponent(body)}`;
-      return;
+    // GA4: potansiyel müşteri
+    window.gtag?.("event", "generate_lead", { form: "contact" });
+
+    // EmailJS yapılandırılmışsa arka planda bir kopya da e-postayla gitsin.
+    // Beklemiyoruz: WhatsApp penceresinin açılabilmesi için kullanıcı hareketi korunmalı.
+    if (EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID && EMAILJS_PUBLIC_KEY) {
+      emailjs
+        .send(
+          EMAILJS_SERVICE_ID,
+          EMAILJS_TEMPLATE_ID,
+          {
+            name: data.name,
+            email: data.email,
+            company: data.company,
+            role: data.role,
+            phone: data.phone,
+            subject: data.subject,
+            product: data.product || "-",
+            message: data.message,
+          },
+          EMAILJS_PUBLIC_KEY
+        )
+        .catch(() => {
+          /* e-posta gitmezse WhatsApp yolu yine çalışır */
+        });
     }
 
-    setStatus("sending");
-    try {
-      await emailjs.send(
-        EMAILJS_SERVICE_ID,
-        EMAILJS_TEMPLATE_ID,
-        {
-          name: data.name,
-          email: data.email,
-          company: data.company,
-          role: data.role,
-          phone: data.phone,
-          subject: data.subject,
-          product: data.product || "-",
-          message: data.message,
-        },
-        EMAILJS_PUBLIC_KEY
-      );
-      setStatus("sent");
-      // GA4: başarılı form gönderimini potansiyel müşteri olayı olarak kaydet
-      window.gtag?.("event", "generate_lead", { form: "contact" });
-      form.reset();
-    } catch {
-      setStatus("error");
-    }
+    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(mesaj)}`;
+    setWaUrl(url);
+    window.gtag?.("event", "whatsapp_click", { link_url: url });
+    // Açılmazsa (pop-up engeli) aşağıdaki bağlantı devreye giriyor
+    window.open(url, "_blank", "noopener,noreferrer");
+    setStatus("sent");
   };
 
   return (
@@ -126,15 +142,21 @@ export default function ContactPage() {
             <textarea name="message" rows={4} placeholder="İhtiyacınızı birkaç cümleyle anlatın" />
           </label>
           <div className="contact-form__actions">
-            <button type="submit" className="btn btn--primary" disabled={status === "sending" || status === "sent"}>
-              {status === "sending" ? "Gönderiliyor…" : "Gönder"}
+            <button type="submit" className="btn btn--primary">
+              WhatsApp&apos;tan gönder
             </button>
-            {status === "sent" && (
-              <span className="form-sent-note">Teşekkürler — aynı iş günü içinde dönüş yapacağız.</span>
+            {status === "idle" && (
+              <span className="form-sent-note">
+                Bilgileriniz hazır bir mesaj olarak WhatsApp&apos;ta açılır; göndermeniz yeterli.
+              </span>
             )}
-            {status === "error" && (
-              <span className="form-sent-note" style={{ color: "#B4232A" }}>
-                Gönderilemedi. Lütfen tekrar deneyin veya info@modelteknoloji.net adresine yazın.
+            {status === "sent" && (
+              <span className="form-sent-note">
+                Teşekkürler — aynı iş günü içinde dönüş yapıyoruz. WhatsApp açılmadıysa{" "}
+                <a href={waUrl} target="_blank" rel="noopener noreferrer">
+                  buraya tıklayın
+                </a>{" "}
+                veya <a href="mailto:info@modelteknoloji.net">info@modelteknoloji.net</a> adresine yazın.
               </span>
             )}
           </div>
