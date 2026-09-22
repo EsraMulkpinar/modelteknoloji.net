@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /* ═══════════════════════════════════════════════════════════
    Kampanya maillerinin indiği karşılama sayfası.
@@ -188,6 +188,19 @@ export default function BaslangicPage() {
     setDurum("idle");
     setKonular([]);
   };
+
+  /* Mailden /baslangic?tur=demo gibi gelen ziyaretçinin önüne
+     ilgili form doğrudan açık gelsin. useSearchParams yerine
+     window kullanılıyor; sayfa böylece statik kalıyor. */
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tur");
+    if (t === "analiz" || t === "demo" || t === "fiyat") {
+      setSecili(t);
+      window.setTimeout(() => {
+        panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 120);
+    }
+  }, []);
 
   const konuDegis = (konu: string) => {
     setKonular((onceki) =>

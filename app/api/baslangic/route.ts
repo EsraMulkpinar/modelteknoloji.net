@@ -8,7 +8,9 @@ import { NextRequest } from "next/server";
      RESEND_API_KEY = re_...
    ═══════════════════════════════════════════════════════════ */
 
-export const runtime = "nodejs";
+/* Edge runtime: soğuk başlatma neredeyse sıfır. Rota yalnızca fetch,
+   process.env ve Response kullanıyor; Node'a özgü bağımlılığı yok. */
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 const GONDEREN = "Model Teknoloji Web <bildirim@modelteknoloji.net>";
