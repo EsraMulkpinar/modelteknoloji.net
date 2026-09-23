@@ -58,6 +58,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  /* 1. Adım — bastırma listesine ekle.
+     Bu çağrı "Full access" yetkili bir anahtar ister; anahtar yalnızca
+     gönderim yetkiliyse 401 döner. O yüzden başarısızlığı yutuyoruz ve
+     2. adımdaki bildirime güveniyoruz. */
+  let bastirildi = false;
   try {
     const yanit = await fetch("https://api.resend.com/suppressions", {
       method: "POST",
@@ -67,18 +72,53 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({ email: eposta }),
     });
-
-    // 409 = adres zaten listede; kullanıcı açısından başarı sayılır.
-    if (!yanit.ok && yanit.status !== 409) {
-      const detay = await yanit.text().catch(() => "");
-      console.error("[abonelik-iptal] Resend hatası:", yanit.status, detay);
-      return Response.json(
-        { hata: "İşleminizi şu anda tamamlayamadık. Lütfen satis@modelteknoloji.net adresine yazın." },
-        { status: 502 }
-      );
+    // 409 = adres zaten listede; başarı sayılır.
+    bastirildi = yanit.ok || yanit.status === 409;
+    if (!bastirildi) {
+      console.error("[abonelik-iptal] Bastırma reddedildi:", yanit.status);
     }
   } catch (err) {
-    console.error("[abonelik-iptal] Ağ hatası:", err);
+    console.error("[abonelik-iptal] Bastırma ağ hatası:", err);
+  }
+
+  /* 2. Adım — satış ekibine haber ver. Otomatik bastırma çalışsa da
+     çalışmasa da bildirim gider; böylece hiçbir talep kaybolmaz. */
+  let bildirildi = false;
+  try {
+    const yanit = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${anahtar}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "Model Teknoloji Web <bildirim@modelteknoloji.net>",
+        to: ["satis@modelteknoloji.net"],
+        subject: `Listeden çıkma talebi — ${eposta}`,
+        text: [
+          "Bir alıcı ticari e-posta listesinden çıkmak istedi.",
+          "",
+          `Adres            : ${eposta}`,
+          `Otomatik bastırma: ${bastirildi ? "yapıldı" : "YAPILAMADI — elle eklenmeli"}`,
+          "",
+          bastirildi
+            ? "Başka bir işlem gerekmiyor."
+            : "Resend > Suppressions bölümüne bu adresi elle ekleyin. Bu talebin 3 iş günü içinde işleme alınması yasal zorunluluktur.",
+          "",
+          "— modelteknoloji.net/abonelik-iptal",
+        ].join("\n"),
+      }),
+    });
+    bildirildi = yanit.ok;
+    if (!bildirildi) {
+      console.error("[abonelik-iptal] Bildirim reddedildi:", yanit.status);
+    }
+  } catch (err) {
+    console.error("[abonelik-iptal] Bildirim ağ hatası:", err);
+  }
+
+  // İki yoldan biri bile çalıştıysa talep kayıt altına alınmış demektir.
+  if (!bastirildi && !bildirildi) {
     return Response.json(
       { hata: "İşleminizi şu anda tamamlayamadık. Lütfen satis@modelteknoloji.net adresine yazın." },
       { status: 502 }
