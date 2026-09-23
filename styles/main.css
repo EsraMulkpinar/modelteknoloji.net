@@ -438,3 +438,17 @@
   .bas-sheet__head { padding: 20px; }
   .bas-done { padding: 26px 20px 28px; }
 }
+
+/* ═══ LİSTEDEN ÇIKMA (/abonelik-iptal) ═════════════════════ */
+.abn-shell { padding-bottom: 96px; max-width: 640px; }
+.abn-title { margin-bottom: 14px; }
+.abn-form { margin-top: 28px; display: grid; gap: 18px; }
+.abn-vazgec { font-size: 14px; color: var(--text-3); text-decoration: underline; }
+.abn-vazgec:hover { color: var(--text-2); }
+.abn-not {
+  margin-top: 22px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.abn-geri { margin-top: 26px; font-size: 14px; padding: 11px 20px; }
